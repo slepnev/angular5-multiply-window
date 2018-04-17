@@ -1,0 +1,9 @@
+<div class="card">
+  <div class="card-body">
+    <h5 class="card-title">Logger card</h5>
+    <ul class="card-text pre-scrollable" *ngIf="messages">
+      <li *ngFor="let message of messages">{{message}}</li>
+    </ul>
+    <p *ngIf="!messages" class="card-text">Empty</p>
+  </div>
+</div>
