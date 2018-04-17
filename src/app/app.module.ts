@@ -3,12 +3,7 @@ import { NgModule } from '@angular/core';
 
 
 import { AppComponent } from './app.component';
-import { LoggerService } from './core/logger/logger.service';
-import { LoggerComponent } from './core/logger/logger.component';
-import { HostComponent } from './shared/non-modal/host/host.component';
-import { NonModalService } from './shared/non-modal/non-modal.service';
 import { TestComponent } from './test-component/test.component';
-import { WindowComponent } from './shared/non-modal/window/window.component';
 import { CoreModule } from './core/core.module';
 import { MainComponent } from './main/main.component';
 import { PhysicalListComponent } from './physicals/physical-list.component';
@@ -17,13 +12,12 @@ import { UserListComponent } from './users/user-list.component';
 import { UserCartComponent } from './users/user-cart/user-cart.component';
 import { ProductListComponent } from './products/product-list.component';
 import { ProductCartComponent } from './products/product-cart/product-cart.component';
+import { SharedModule } from './shared/shared.module';
 
 
 @NgModule({
   declarations: [
     AppComponent,
-    HostComponent,
-    WindowComponent,
     TestComponent,
     MainComponent,
     PhysicalListComponent,
@@ -35,11 +29,10 @@ import { ProductCartComponent } from './products/product-cart/product-cart.compo
   ],
   imports: [
     BrowserModule,
-    CoreModule
+    CoreModule,
+    SharedModule
   ],
-  providers: [
-    NonModalService,
-  ],
+  providers: [],
   bootstrap: [
     AppComponent
   ],
