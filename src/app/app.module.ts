@@ -3,7 +3,6 @@ import { NgModule } from '@angular/core';
 
 
 import { AppComponent } from './app.component';
-import { TestComponent } from './test-component/test.component';
 import { CoreModule } from './core/core.module';
 import { MainComponent } from './main/main.component';
 import { PhysicalListComponent } from './physicals/physical-list.component';
@@ -13,12 +12,13 @@ import { UserCartComponent } from './users/user-cart/user-cart.component';
 import { ProductListComponent } from './products/product-list.component';
 import { ProductCartComponent } from './products/product-cart/product-cart.component';
 import { SharedModule } from './shared/shared.module';
+import { AppRoutingModule } from './app.routing';
+import { RouterModule } from '@angular/router';
 
 
 @NgModule({
   declarations: [
     AppComponent,
-    TestComponent,
     MainComponent,
     PhysicalListComponent,
     PhysicalCartComponent,
@@ -30,14 +30,18 @@ import { SharedModule } from './shared/shared.module';
   imports: [
     BrowserModule,
     CoreModule,
-    SharedModule
+    SharedModule,
+    AppRoutingModule,
+    RouterModule
   ],
   providers: [],
   bootstrap: [
     AppComponent
   ],
   entryComponents: [
-    TestComponent,
+    PhysicalCartComponent,
+    UserCartComponent,
+    ProductCartComponent
   ]
 })
 export class AppModule {

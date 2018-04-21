@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --open=true --sourcemap --ec=true --port=4001",
+    "start": "ng serve --open=true --sourcemap --extractCss --port=4001",
     "build": "ng build --prod",
     "test": "ng test",
     "lint": "ng lint",
@@ -22,11 +22,14 @@
     "@angular/platform-browser-dynamic": "^5.2.0",
     "@angular/router": "^5.2.0",
     "core-js": "^2.4.1",
+    "css-loader": "^0.28.11",
+    "exports-loader": "^0.7.0",
     "rxjs": "^5.5.6",
     "zone.js": "^0.8.19"
   },
   "devDependencies": {
-    "@angular/cli": "~1.7.4",
+    "@angular-devkit/core": "^0.5.7",
+    "@angular/cli": "^1.7.1",
     "@angular/compiler-cli": "^5.2.0",
     "@angular/language-service": "^5.2.0",
     "@types/jasmine": "~2.8.3",
@@ -34,6 +37,7 @@
     "@types/node": "~6.0.60",
     "bootstrap": "^4.1.0",
     "codelyzer": "^4.0.1",
+    "font-awesome": "^4.7.0",
     "jasmine-core": "~2.8.0",
     "jasmine-spec-reporter": "~4.2.1",
     "karma": "~2.0.0",
