@@ -1,24 +1,17 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HostComponent } from './non-modal/host/host.component';
-import { WindowComponent } from './non-modal/window/window.component';
-import { NonModalService } from './non-modal/non-modal.service';
+import { NonModalModule } from './non-modal/non-modal.module';
 
 @NgModule({
   imports: [
-    CommonModule
+    CommonModule,
+    NonModalModule
   ],
-  declarations: [
-    HostComponent,
-    WindowComponent,
-  ],
+  declarations: [],
   exports: [
-    HostComponent,
-    WindowComponent,
+    NonModalModule
   ],
-  providers: [
-    NonModalService,
-  ]
+  providers: []
 })
 export class SharedModule {
 }

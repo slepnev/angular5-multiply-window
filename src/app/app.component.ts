@@ -1,6 +1,5 @@
-import {Component, ComponentRef} from '@angular/core';
-import {NonModalService} from './shared/non-modal/non-modal.service';
-import {TestComponent} from './test-component/test.component';
+import { Component } from '@angular/core';
+import { NonModalService } from './shared/non-modal/non-modal.service';
 
 @Component({
   selector: 'app-root',
@@ -9,21 +8,7 @@ import {TestComponent} from './test-component/test.component';
 })
 export class AppComponent {
 
-  constructor(private nonModalService: NonModalService) { }
-
-  openTest1Component() {
-    this.nonModalService.openWindow(TestComponent)
-      .then((c: ComponentRef<TestComponent>) => {
-        /*
-         * Do something with component ref
-         */
-      });
-  }
-
-  openTest2Component() {
-    this.nonModalService.openWindow(TestComponent, {
-      'welcome': 'Hello, World2!'
-    })
+  constructor() {
   }
 
 }
