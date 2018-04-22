@@ -1,6 +1,33 @@
-.window{
+.window {
   position: fixed;
-  left: 0;
-  top: 0;
-  opacity: 0.7;
+  width: 400px;
+  left: 150px;
+  top: 200px;
+  z-index: 10;
+
+  &_hide {
+    display: none;
+  }
+
+  &_active {
+    z-index: 11;
+  }
+
+  &__header{
+    cursor: move;
+  }
+}
+
+@media (max-width: 1200px){
+  .window {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    transform: none !important;
+
+    &__header{
+      cursor: default;
+    }
+  }
 }

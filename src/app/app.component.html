@@ -6,15 +6,15 @@
     <div class="col-auto bg-light">
       <app-menu></app-menu>
     </div>
-    <div class="col position-relative bg-white p-2">
-      <router-outlet></router-outlet>
-      <app-non-modal-host></app-non-modal-host>
+    <div class="col">
+      <app-window-list></app-window-list>
+      <div class="position-relative bg-white p-2">
+        <router-outlet></router-outlet>
+        <app-non-modal-host></app-non-modal-host>
+      </div>
     </div>
     <div class="col-3">
       <app-loger></app-loger>
     </div>
   </div>
-  <!-- Non modal host -->
-
-  <!-- /Non modal host -->
 </div>

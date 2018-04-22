@@ -1,0 +1,14 @@
+<div class="window-list bg-light p-2 mb-3 clearfix">
+  <div class="font-weight-bold mb-2">
+    Окна:
+  </div>
+  <div class="float-left ml-2 mb-2" *ngFor="let item of collection">
+    <div class="btn-group btn-group-sm" role="group">
+      <button type="button" class="btn btn-sm"  (click)="onChange(item)"
+              [ngClass]="{'btn-warning': item.active,'btn-info': item.hide}">
+        {{(item.options && item.options['caption']) ? item.options['caption'] : item.id}}
+      </button>
+      <button type="button" class="btn btn-sm btn-danger" (click)="onClose(item)">x</button>
+    </div>
+  </div>
+</div>

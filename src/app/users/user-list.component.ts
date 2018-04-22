@@ -1,5 +1,4 @@
-import { Component, ComponentRef, OnInit } from '@angular/core';
-import { UserCartComponent } from './user-cart/user-cart.component';
+import { Component, OnInit } from '@angular/core';
 
 @Component({
   selector: 'app-user-list',
@@ -21,9 +20,14 @@ export class UserListComponent implements OnInit {
     'User 10',
   ];
 
-  constructor() { }
+  constructor() {
+  }
 
   ngOnInit() {
+  }
+
+  getComponent(component) {
+    // console.log(component);
   }
 
 }

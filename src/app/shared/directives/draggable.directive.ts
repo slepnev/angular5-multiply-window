@@ -1,462 +1,369 @@
-import {
-  Directive,
-  OnInit,
-  ElementRef,
-  Renderer2,
-  Output,
-  EventEmitter,
-  Input,
-  OnDestroy,
-  OnChanges,
-  NgZone,
-  SimpleChanges
-} from '@angular/core';
-import { Subject } from 'rxjs/Subject';
-import { Observable } from 'rxjs/Observable';
-import { merge } from 'rxjs/observable/merge';
-import { map } from 'rxjs/operators/map';
-import { mergeMap } from 'rxjs/operators/mergeMap';
-import { takeUntil } from 'rxjs/operators/takeUntil';
-import { take } from 'rxjs/operators/take';
-import { takeLast } from 'rxjs/operators/takeLast';
-import { pairwise } from 'rxjs/operators/pairwise';
-import { share } from 'rxjs/operators/share';
-import { filter } from 'rxjs/operators/filter';
-import { DraggableHelper } from './draggable-helper.provider';
+import { Directive, ElementRef, Renderer2, Input, Output, OnInit, HostListener,
+  EventEmitter, OnChanges, SimpleChanges } from '@angular/core';
 
-export interface Coordinates {
+export interface IPosition {
   x: number;
   y: number;
 }
 
-export interface DragAxis {
-  x: boolean;
-  y: boolean;
+class Position implements IPosition {
+  constructor(public x: number, public y: number) {
+  }
+
+  static fromEvent(e: MouseEvent | TouchEvent) {
+    if (e instanceof MouseEvent) {
+      return new Position(e.clientX, e.clientY);
+    } else {
+      return new Position(e.changedTouches[0].clientX, e.changedTouches[0].clientY);
+    }
+  }
+
+  static isIPosition(obj): obj is IPosition {
+    return !!obj && ('x' in obj) && ('y' in obj);
+  }
+
+  add(p: IPosition) {
+    this.x += p.x;
+    this.y += p.y;
+    return this;
+  }
+
+  subtract(p: IPosition) {
+    this.x -= p.x;
+    this.y -= p.y;
+    return this;
+  }
+
+  reset() {
+    this.x = 0;
+    this.y = 0;
+    return this;
+  }
+
+  set(p: IPosition) {
+    this.x = p.x;
+    this.y = p.y;
+    return this;
+  }
 }
-
-export interface SnapGrid {
-  x?: number;
-  y?: number;
-}
-
-export type ValidateDrag = (coordinates: Coordinates) => boolean;
-
-export interface PointerEvent {
-  clientX: number;
-  clientY: number;
-  event: MouseEvent | TouchEvent;
-}
-
-const MOVE_CURSOR: string = 'move';
 
 @Directive({
-  selector: '[mwlDraggable]'
+  selector: '[appDraggable]',
+  // exportAs: 'appDraggable'
 })
-export class DraggableDirective implements OnInit, OnChanges, OnDestroy {
-  /**
-   * an object of data you can pass to the drop event
-   */
-  @Input() dropData: any;
+export class DraggableDirective implements OnInit, OnChanges {
+  private allowDrag = true;
+  private moving = false;
+  private orignal: Position = null;
+  private oldTrans = new Position(0, 0);
+  private tempTrans = new Position(0, 0);
+  private oldZIndex = '';
+  private oldPosition = '';
+  private _zIndex = '';
+  private needTransform = false;
 
-  /**
-   * The axis along which the element is draggable
-   */
-  @Input() dragAxis: DragAxis = { x: true, y: true };
+  @Output() started = new EventEmitter<any>();
+  @Output() stopped = new EventEmitter<any>();
+  @Output() edge = new EventEmitter<any>();
 
-  /**
-   * Snap all drags to an x / y grid
-   */
-  @Input() dragSnapGrid: SnapGrid = {};
+  /** Make the handle HTMLElement draggable */
+  @Input() handle: HTMLElement;
 
-  /**
-   * Show a ghost element that shows the drag when dragging
-   */
-  @Input() ghostDragEnabled: boolean = true;
+  /** Set the bounds HTMLElement */
+  @Input() bounds: HTMLElement;
 
-  /**
-   * Allow custom behaviour to control when the element is dragged
-   */
-  @Input() validateDrag: ValidateDrag;
+  /** List of allowed out of bounds edges **/
+  @Input() outOfBounds = {
+    top: false,
+    right: false,
+    bottom: false,
+    left: false
+  };
 
-  /**
-   * The cursor to use when dragging the element
-   */
-  @Input() dragCursor = MOVE_CURSOR;
+  /** Set z-index when dragging */
+  @Input() zIndexMoving: string;
 
-  /**
-   * Called when the element can be dragged along one axis and has the mouse or pointer device pressed on it
-   */
-  @Output() dragPointerDown = new EventEmitter<Coordinates>();
+  /** Set z-index when not dragging */
+  @Input()
+  set zIndex(setting: string) {
+    this.renderer.setStyle(this.el.nativeElement, 'z-index', setting);
+    this._zIndex = setting;
+  }
 
-  /**
-   * Called when the element has started to be dragged.
-   * Only called after at least one mouse or touch move event
-   */
-  @Output() dragStart = new EventEmitter<Coordinates>();
+  /** Whether to limit the element stay in the bounds */
+  @Input() inBounds = false;
 
-  /**
-   * Called when the element is being dragged
-   */
-  @Output() dragging = new EventEmitter<Coordinates>();
+  /** Whether the element should use it's previous drag position on a new drag event. */
+  @Input() trackPosition = true;
 
-  /**
-   * Called after the element is dragged
-   */
-  @Output() dragEnd = new EventEmitter<Coordinates>();
+  /** Input css scale transform of element so translations are correct */
+  @Input() scale = 1;
 
-  /**
-   * @hidden
-   */
-  pointerDown: Subject<PointerEvent> = new Subject();
+  /** Whether to prevent default event */
+  @Input() preventDefaultEvent = false;
 
-  /**
-   * @hidden
-   */
-  pointerMove: Subject<PointerEvent> = new Subject();
+  /** Set initial position by offsets */
+  @Input() position: IPosition = {x: 0, y: 0};
 
-  /**
-   * @hidden
-   */
-  pointerUp: Subject<PointerEvent> = new Subject();
+  /** Emit position offsets when moving */
+  @Output() movingOffset = new EventEmitter<IPosition>();
 
-  private eventListenerSubscriptions: {
-    mousemove?: () => void;
-    mousedown?: () => void;
-    mouseup?: () => void;
-    mouseenter?: () => void;
-    mouseleave?: () => void;
-    touchstart?: () => void;
-    touchmove?: () => void;
-    touchend?: () => void;
-    touchcancel?: () => void;
-  } = {};
+  /** Emit position offsets when put back */
+  @Output() endOffset = new EventEmitter<IPosition>();
 
-  /**
-   * @hidden
-   */
-  constructor(
-    public element: ElementRef,
-    private renderer: Renderer2,
-    private draggableHelper: DraggableHelper,
-    private zone: NgZone
-  ) {}
+  @Input()
+  set appDraggable(setting: any) {
+    if (setting !== undefined && setting !== null && setting !== '') {
+      this.allowDrag = !!setting;
 
-  ngOnInit(): void {
-    this.checkEventListeners();
+      const element = this.handle ? this.handle : this.el.nativeElement;
 
-    const pointerDrag: Observable<any> = this.pointerDown
-      .pipe(filter(() => this.canDrag()))
-      .pipe(
-        mergeMap((pointerDownEvent: PointerEvent) => {
-          const currentDrag: Subject<any> = new Subject();
+      if (this.allowDrag) {
+        this.renderer.addClass(element, 'ng-draggable');
+      } else {
+        this.renderer.removeClass(element, 'ng-draggable');
+      }
+    }
+  }
 
-          this.zone.run(() => {
-            this.dragPointerDown.next({ x: 0, y: 0 });
-          });
+  constructor(private el: ElementRef, private renderer: Renderer2) {
+  }
 
-          const pointerMove: Observable<Coordinates> = this.pointerMove
-            .pipe(
-              map((pointerMoveEvent: PointerEvent) => {
-                pointerMoveEvent.event.preventDefault();
+  ngOnInit() {
+    if (this.allowDrag) {
+      const element = this.handle ? this.handle : this.el.nativeElement;
+      this.renderer.addClass(element, 'ng-draggable');
+    }
 
-                return {
-                  currentDrag,
-                  x: pointerMoveEvent.clientX - pointerDownEvent.clientX,
-                  y: pointerMoveEvent.clientY - pointerDownEvent.clientY,
-                  clientX: pointerMoveEvent.clientX,
-                  clientY: pointerMoveEvent.clientY
-                };
-              })
-            )
-            .pipe(
-              map((moveData: Coordinates) => {
-                if (this.dragSnapGrid.x) {
-                  moveData.x =
-                    Math.floor(moveData.x / this.dragSnapGrid.x) *
-                    this.dragSnapGrid.x;
-                }
+    this.resetPosition();
+  }
 
-                if (this.dragSnapGrid.y) {
-                  moveData.y =
-                    Math.floor(moveData.y / this.dragSnapGrid.y) *
-                    this.dragSnapGrid.y;
-                }
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes['position'] && !changes['position'].isFirstChange()) {
+      let p = changes['position'].currentValue;
 
-                return moveData;
-              })
-            )
-            .pipe(
-              map((moveData: Coordinates) => {
-                if (!this.dragAxis.x) {
-                  moveData.x = 0;
-                }
-
-                if (!this.dragAxis.y) {
-                  moveData.y = 0;
-                }
-
-                return moveData;
-              })
-            )
-            .pipe(
-              filter(
-                ({ x, y }) => !this.validateDrag || this.validateDrag({ x, y })
-              )
-            )
-            .pipe(takeUntil(merge(this.pointerUp, this.pointerDown)))
-            .pipe(share());
-
-          pointerMove.pipe(take(1)).subscribe(() => {
-            pointerDownEvent.event.preventDefault();
-
-            this.zone.run(() => {
-              this.dragStart.next({ x: 0, y: 0 });
-            });
-
-            this.setCursor(this.dragCursor);
-
-            this.draggableHelper.currentDrag.next(currentDrag);
-          });
-
-          pointerMove.pipe(takeLast(1)).subscribe(({ x, y }) => {
-            this.zone.run(() => {
-              this.dragEnd.next({ x, y });
-            });
-            currentDrag.complete();
-            this.setCssTransform(null);
-            if (this.ghostDragEnabled) {
-              this.renderer.setStyle(
-                this.element.nativeElement,
-                'pointerEvents',
-                null
-              );
-            }
-          });
-
-          return pointerMove;
-        })
-      )
-      .pipe(share());
-
-    merge(
-      pointerDrag.pipe(take(1)).pipe(map(value => [, value])),
-      pointerDrag.pipe(pairwise())
-    )
-      .pipe(
-        filter(([previous, next]) => {
-          if (!previous) {
-            return true;
-          }
-          return previous.x !== next.x || previous.y !== next.y;
-        })
-      )
-      .pipe(map(([previous, next]) => next))
-      .subscribe(({ x, y, currentDrag, clientX, clientY }) => {
-        this.zone.run(() => {
-          this.dragging.next({ x, y });
-        });
-        if (this.ghostDragEnabled) {
-          this.renderer.setStyle(
-            this.element.nativeElement,
-            'pointerEvents',
-            'none'
-          );
+      if (!this.moving) {
+        if (Position.isIPosition(p)) {
+          this.oldTrans.set(p);
+        } else {
+          this.oldTrans.reset();
         }
-        this.setCssTransform(`translate(${x}px, ${y}px)`);
-        currentDrag.next({
-          clientX,
-          clientY,
-          dropData: this.dropData
-        });
-      });
-  }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes['dragAxis']) {
-      this.checkEventListeners();
+        this.transform();
+      } else {
+        this.needTransform = true;
+      }
     }
   }
 
-  ngOnDestroy(): void {
-    this.unsubscribeEventListeners();
-    this.pointerDown.complete();
-    this.pointerMove.complete();
-    this.pointerUp.complete();
-  }
-
-  private checkEventListeners(): void {
-    const canDrag: boolean = this.canDrag();
-    const hasEventListeners: boolean =
-      Object.keys(this.eventListenerSubscriptions).length > 0;
-
-    if (canDrag && !hasEventListeners) {
-      this.zone.runOutsideAngular(() => {
-        this.eventListenerSubscriptions.mousedown = this.renderer.listen(
-          this.element.nativeElement,
-          'mousedown',
-          (event: MouseEvent) => {
-            this.onMouseDown(event);
-          }
-        );
-
-        this.eventListenerSubscriptions.mouseup = this.renderer.listen(
-          'document',
-          'mouseup',
-          (event: MouseEvent) => {
-            this.onMouseUp(event);
-          }
-        );
-
-        this.eventListenerSubscriptions.touchstart = this.renderer.listen(
-          this.element.nativeElement,
-          'touchstart',
-          (event: TouchEvent) => {
-            this.onTouchStart(event);
-          }
-        );
-
-        this.eventListenerSubscriptions.touchend = this.renderer.listen(
-          'document',
-          'touchend',
-          (event: TouchEvent) => {
-            this.onTouchEnd(event);
-          }
-        );
-
-        this.eventListenerSubscriptions.touchcancel = this.renderer.listen(
-          'document',
-          'touchcancel',
-          (event: TouchEvent) => {
-            this.onTouchEnd(event);
-          }
-        );
-
-        this.eventListenerSubscriptions.mouseenter = this.renderer.listen(
-          this.element.nativeElement,
-          'mouseenter',
-          () => {
-            this.onMouseEnter();
-          }
-        );
-
-        this.eventListenerSubscriptions.mouseleave = this.renderer.listen(
-          this.element.nativeElement,
-          'mouseleave',
-          () => {
-            this.onMouseLeave();
-          }
-        );
-      });
-    } else if (!canDrag && hasEventListeners) {
-      this.unsubscribeEventListeners();
+  resetPosition() {
+    if (Position.isIPosition(this.position)) {
+      this.oldTrans.set(this.position);
+    } else {
+      this.oldTrans.reset();
     }
+    this.tempTrans.reset();
+    this.transform();
   }
 
-  private onMouseDown(event: MouseEvent): void {
-    if (!this.eventListenerSubscriptions.mousemove) {
-      this.eventListenerSubscriptions.mousemove = this.renderer.listen(
-        'document',
-        'mousemove',
-        (mouseMoveEvent: MouseEvent) => {
-          this.pointerMove.next({
-            event: mouseMoveEvent,
-            clientX: mouseMoveEvent.clientX,
-            clientY: mouseMoveEvent.clientY
-          });
-        }
-      );
-    }
-    this.pointerDown.next({
-      event,
-      clientX: event.clientX,
-      clientY: event.clientY
-    });
-  }
+  private moveTo(p: Position) {
+    if (this.orignal) {
+      p.subtract(this.orignal);
+      this.tempTrans.set(p);
+      this.transform();
 
-  private onMouseUp(event: MouseEvent): void {
-    if (this.eventListenerSubscriptions.mousemove) {
-      this.eventListenerSubscriptions.mousemove();
-      delete this.eventListenerSubscriptions.mousemove;
-    }
-    this.pointerUp.next({
-      event,
-      clientX: event.clientX,
-      clientY: event.clientY
-    });
-  }
+      if (this.bounds) {
+        this.edge.emit(this.boundsCheck());
+      }
 
-  private onTouchStart(event: TouchEvent): void {
-    if (!this.eventListenerSubscriptions.touchmove) {
-      this.eventListenerSubscriptions.touchmove = this.renderer.listen(
-        'document',
-        'touchmove',
-        (touchMoveEvent: TouchEvent) => {
-          this.pointerMove.next({
-            event: touchMoveEvent,
-            clientX: touchMoveEvent.targetTouches[0].clientX,
-            clientY: touchMoveEvent.targetTouches[0].clientY
-          });
-        }
-      );
-    }
-    this.pointerDown.next({
-      event,
-      clientX: event.touches[0].clientX,
-      clientY: event.touches[0].clientY
-    });
-  }
-
-  private onTouchEnd(event: TouchEvent): void {
-    if (this.eventListenerSubscriptions.touchmove) {
-      this.eventListenerSubscriptions.touchmove();
-      delete this.eventListenerSubscriptions.touchmove;
-    }
-    this.pointerUp.next({
-      event,
-      clientX: event.changedTouches[0].clientX,
-      clientY: event.changedTouches[0].clientY
-    });
-  }
-
-  private onMouseEnter(): void {
-    this.setCursor(this.dragCursor);
-  }
-
-  private onMouseLeave(): void {
-    this.setCursor(null);
-  }
-
-  private setCssTransform(value: string | null): void {
-    if (this.ghostDragEnabled) {
-      const transformAttributes = [
-        'transform',
-        '-webkit-transform',
-        '-ms-transform',
-        '-moz-transform',
-        '-o-transform'
-      ];
-      transformAttributes.forEach(transformAttribute => {
-        this.renderer.setStyle(
-          this.element.nativeElement,
-          transformAttribute,
-          value
-        );
+      this.movingOffset.emit({
+        x: this.tempTrans.x + this.oldTrans.x,
+        y: this.tempTrans.y + this.oldTrans.y
       });
     }
   }
 
-  private canDrag(): boolean {
-    return this.dragAxis.x || this.dragAxis.y;
+  private transform() {
+    let value = `translate(${this.tempTrans.x + this.oldTrans.x}px, ${this.tempTrans.y + this.oldTrans.y}px)`;
+
+    if (this.scale !== 1) {
+      value += ` scale(${this.scale})`;
+    }
+
+    this.renderer.setStyle(this.el.nativeElement, 'transform', value);
+    this.renderer.setStyle(this.el.nativeElement, '-webkit-transform', value);
+    this.renderer.setStyle(this.el.nativeElement, '-ms-transform', value);
+    this.renderer.setStyle(this.el.nativeElement, '-moz-transform', value);
+    this.renderer.setStyle(this.el.nativeElement, '-o-transform', value);
   }
 
-  private setCursor(value: string | null): void {
-    this.renderer.setStyle(this.element.nativeElement, 'cursor', value);
+  private pickUp() {
+    // get old z-index:
+    this.oldZIndex = this.el.nativeElement.style.zIndex ? this.el.nativeElement.style.zIndex : '';
+
+    if (window) {
+      this.oldZIndex = window.getComputedStyle(this.el.nativeElement, null).getPropertyValue('z-index');
+    }
+
+    if (this.zIndexMoving) {
+      this.renderer.setStyle(this.el.nativeElement, 'z-index', this.zIndexMoving);
+    }
+
+    if (!this.moving) {
+      this.started.emit(this.el.nativeElement);
+      this.moving = true;
+    }
   }
 
-  private unsubscribeEventListeners(): void {
-    Object.keys(this.eventListenerSubscriptions).forEach(type => {
-      (this as any).eventListenerSubscriptions[type]();
-      delete (this as any).eventListenerSubscriptions[type];
-    });
+  private boundsCheck() {
+    if (this.bounds) {
+      const boundary = this.bounds.getBoundingClientRect();
+      const elem = this.el.nativeElement.getBoundingClientRect();
+      const result = {
+        'top': this.outOfBounds.top ? true : boundary.top < elem.top,
+        'right': this.outOfBounds.right ? true : boundary.right > elem.right,
+        'bottom': this.outOfBounds.bottom ? true : boundary.bottom > elem.bottom,
+        'left': this.outOfBounds.left ? true : boundary.left < elem.left
+      };
+
+      if (this.inBounds) {
+        if (!result.top) {
+          this.tempTrans.y -= elem.top - boundary.top;
+        }
+
+        if (!result.bottom) {
+          this.tempTrans.y -= elem.bottom - boundary.bottom;
+        }
+
+        if (!result.right) {
+          this.tempTrans.x -= elem.right - boundary.right;
+        }
+
+        if (!result.left) {
+          this.tempTrans.x -= elem.left - boundary.left;
+        }
+
+        this.transform();
+      }
+
+      return result;
+    }
+  }
+
+  private putBack() {
+    if (this._zIndex) {
+      this.renderer.setStyle(this.el.nativeElement, 'z-index', this._zIndex);
+    } else if (this.zIndexMoving) {
+      if (this.oldZIndex) {
+        this.renderer.setStyle(this.el.nativeElement, 'z-index', this.oldZIndex);
+      } else {
+        this.el.nativeElement.style.removeProperty('z-index');
+      }
+    }
+
+    if (this.moving) {
+      this.stopped.emit(this.el.nativeElement);
+
+      if (this.needTransform) {
+        if (Position.isIPosition(this.position)) {
+          this.oldTrans.set(this.position);
+        } else {
+          this.oldTrans.reset();
+        }
+
+        this.transform();
+        this.needTransform = false;
+      }
+
+      if (this.bounds) {
+        this.edge.emit(this.boundsCheck());
+      }
+
+      this.moving = false;
+      this.endOffset.emit({
+        x: this.tempTrans.x + this.oldTrans.x,
+        y: this.tempTrans.y + this.oldTrans.y
+      });
+
+      if (this.trackPosition) {
+        this.oldTrans.add(this.tempTrans);
+      }
+
+      this.tempTrans.reset();
+
+      if (!this.trackPosition) {
+        this.transform();
+      }
+    }
+  }
+
+  checkHandleTarget(target: Element, element: Element) {
+    // Checks if the target is the element clicked, then checks each child element of element as well
+    // Ignores button clicks
+
+    // Ignore elements of type button
+    if (element.tagName === 'BUTTON') {
+      return false;
+    }
+
+    // If the target was found, return true (handle was found)
+    if (element === target) {
+      return true;
+    }
+
+    // Recursively iterate this elements children
+    for (const child in element.children) {
+      if (element.children.hasOwnProperty(child)) {
+        if (this.checkHandleTarget(target, element.children[child])) {
+          return true;
+        }
+      }
+    }
+
+    // Handle was not found in this lineage
+    // Note: return false is ignore unless it is the parent element
+    return false;
+  }
+
+  @HostListener('mousedown', ['$event'])
+  @HostListener('touchstart', ['$event'])
+  onMouseDown(event: MouseEvent | TouchEvent) {
+    // 1. skip right click;
+    if (event instanceof MouseEvent && event.button === 2) {
+      return;
+    }
+    // 2. if handle is set, the element can only be moved by handle
+    if (this.handle !== undefined && !this.checkHandleTarget(event.srcElement, this.handle)) {
+      return;
+    }
+
+    if (this.preventDefaultEvent) {
+      event.stopPropagation();
+      event.preventDefault();
+    }
+
+    this.orignal = Position.fromEvent(event);
+    this.pickUp();
+  }
+
+  @HostListener('document:mouseup')
+  @HostListener('document:mouseleave')
+  @HostListener('document:touchend')
+  @HostListener('document:touchcancel')
+  onMouseLeave() {
+    this.putBack();
+  }
+
+  @HostListener('document:mousemove', ['$event'])
+  @HostListener('document:touchmove', ['$event'])
+  onMouseMove(event: MouseEvent | TouchEvent) {
+    if (this.moving && this.allowDrag) {
+      if (this.preventDefaultEvent) {
+        event.stopPropagation();
+        event.preventDefault();
+      }
+
+      this.moveTo(Position.fromEvent(event));
+    }
   }
 }

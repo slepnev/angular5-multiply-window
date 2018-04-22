@@ -1,6 +1,5 @@
-import { Component, ComponentRef, Input, OnInit } from '@angular/core';
+import { Component, ComponentRef, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { NonModalService } from '../non-modal.service';
-import { PhysicalCartComponent } from '../../../physicals/physical-cart/physical-cart.component';
 import { nonModalCompnents } from '../non-modal-components';
 
 @Component({
@@ -11,7 +10,11 @@ import { nonModalCompnents } from '../non-modal-components';
 export class LinkComponent implements OnInit {
 
   @Input('component') public component;
+  @Input('id') public id;
+  @Input('caption') public caption;
+  @Input('params') public params;
   @Input('componentType') public componentType;
+  @Output('onComponent') public onComponent = new EventEmitter();
 
   constructor(private nonModalService: NonModalService) {
   }
@@ -23,12 +26,13 @@ export class LinkComponent implements OnInit {
   }
 
   openComponent() {
-    if (this.componentType) {
-      this.nonModalService.openWindow(this.componentType)
+    if (this.componentType && this.id !== null) {
+      const options = {};
+      options['caption'] = this.caption;
+      options['params'] = this.params;
+      this.nonModalService.openWindow(this.componentType, this.id, options)
         .then((c: ComponentRef<any>) => {
-          /*
-           * Do something with component ref
-           */
+          this.onComponent.emit(c);
         });
     }
   }
