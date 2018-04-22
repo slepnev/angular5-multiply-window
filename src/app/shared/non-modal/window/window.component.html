@@ -1,6 +1,14 @@
-<div class="card mt-3 window">
-  <div class="card-body">
-    <a class="float-right" (click)="close()">&times;</a>
-    <ng-template #componentContainer></ng-template>
+<div class="window" [ngClass]="{'window_hide': hide, 'window_active': active}" [appDraggable]="draggable"
+     [outOfBounds]="{ top: true, right: true, bottom: true, left: true }" [handle]="myHandle"
+        [preventDefaultEvent]="false">
+  <div class="card bg-light shadow m-1">
+    <div #myHandle class="card-header window__header" [ngClass]="{'bg-warning': active}">
+      №{{id}} {{caption}}
+      <button class="btn btn-sm btn-danger float-right" type="button" (click)="onClose()">Close</button>
+      <button class="btn btn-sm btn-info float-right mr-1" type="button" (click)="onHide()">Hide</button>
+    </div>
+    <div class="card-body">
+      <ng-template #componentContainer></ng-template>
+    </div>
   </div>
 </div>

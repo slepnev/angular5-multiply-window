@@ -1,14 +1,16 @@
-import {ComponentFactory, ComponentRef, Injectable, Type} from '@angular/core';
-import {HostComponentInterface} from './host/host-component.interface';
-import {LoggerService} from '../../core/logger/logger.service';
-import {WindowComponent} from './window/window.component';
+import { ComponentFactory, ComponentRef, EventEmitter, Injectable, Type } from '@angular/core';
+import { HostComponentInterface } from './host/host-component.interface';
+import { LoggerService } from '../../core/logger/logger.service';
+import { WindowComponent } from './window/window.component';
 
 @Injectable()
 export class NonModalService {
 
   private host: HostComponentInterface;
+  public changeCollection: EventEmitter<any> = new EventEmitter();
 
-  constructor(private logger: LoggerService) { }
+  constructor(private logger: LoggerService) {
+  }
 
   public registerHost(host: HostComponentInterface) {
     /*
@@ -18,12 +20,12 @@ export class NonModalService {
     this.logger.log.emit('|>> Host registered');
   }
 
-  public openWindow<T>(componentType: Type<T>, options?: {[key: string]: any}): Promise<ComponentRef<T>> {
+  public openWindow<T>(componentType: Type<T>, id: any, options?: { [key: string]: any }): Promise<ComponentRef<T>> {
     /*
      * Open new window with component
      */
-    this.logger.log.emit(`|>> Open window for ${componentType.name}`);
-    return this.host.onComponentInWindow(componentType, options);
+    this.logger.log.emit(`|>> Open window for ${options['caption']}`);
+    return this.host.onComponentInWindow(componentType, id, options);
   }
 
   public registerWindow(window: WindowComponent) {
@@ -44,13 +46,28 @@ export class NonModalService {
     this.host.resolvers.delete(factory);
   }
 
-  public unregisterWindow(window: WindowComponent) {
+  public unregisterWindow(factory) {
     /*
      * Unregister window, trigger OnDestroy hook
      */
-    this.host.unregisterWindow(window);
-
+    this.host.unregisterWindow(factory);
     this.logger.log.emit(`|>> Host collection length: ${this.host.collection.length}`);
   }
 
+  public hideWindow(factory) {
+    /*
+     * Hide window
+     */
+    this.host.hideWindow(factory);
+    this.logger.log.emit(`|>> Hide window`);
+  }
+
+  public onChagneCollection() {
+    this.changeCollection.emit(this.host.collection);
+  }
+
+  public activeWindow(factory) {
+    this.host.activeWindow(factory);
+    this.logger.log.emit(`|>> Active window`);
+  }
 }

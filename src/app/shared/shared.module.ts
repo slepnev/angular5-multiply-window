@@ -2,7 +2,6 @@ import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { NonModalModule } from './non-modal/non-modal.module';
 import { DraggableDirective } from './directives/draggable.directive';
-import { DraggableHelper } from './directives/draggable-helper.provider';
 
 @NgModule({
   imports: [
@@ -10,15 +9,11 @@ import { DraggableHelper } from './directives/draggable-helper.provider';
     NonModalModule
   ],
   declarations: [
-    DraggableDirective
   ],
   exports: [
     NonModalModule,
-    DraggableDirective
   ],
-  providers: [
-    DraggableHelper
-  ]
+  providers: []
 })
 export class SharedModule {
 }

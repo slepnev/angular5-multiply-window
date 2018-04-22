@@ -1,8 +1,8 @@
-import {Component, ComponentFactory, ComponentFactoryResolver, ComponentRef, OnInit, Type} from '@angular/core';
-import {HostComponentInterface} from './host-component.interface';
-import {NonModalService} from '../non-modal.service';
-import {LoggerService} from '../../../core/logger/logger.service';
-import {WindowComponent} from '../window/window.component';
+import { Component, ComponentFactory, ComponentFactoryResolver, ComponentRef, OnInit, QueryList, Type, ViewChildren } from '@angular/core';
+import { HostComponentInterface } from './host-component.interface';
+import { NonModalService } from '../non-modal.service';
+import { LoggerService } from '../../../core/logger/logger.service';
+import { WindowComponent } from '../window/window.component';
 
 @Component({
   selector: 'app-non-modal-host',
@@ -11,11 +11,12 @@ import {WindowComponent} from '../window/window.component';
 })
 export class HostComponent implements HostComponentInterface, OnInit {
 
+  @ViewChildren(WindowComponent) viewChildren: QueryList<WindowComponent>;
   /*
    * Collection of component factories
    * for passing it into window components
    */
-  collection: Array<[ComponentFactory<any>, any]> = [];
+  collection: Array<{ factory: ComponentFactory<any>, id: any, options: any, hide: boolean, active: boolean }> = [];
 
   /*
    * Store component factory and promise resolver
@@ -26,7 +27,8 @@ export class HostComponent implements HostComponentInterface, OnInit {
 
   constructor(private nonModalService: NonModalService,
               private resolver: ComponentFactoryResolver,
-              private logger: LoggerService) { }
+              private logger: LoggerService) {
+  }
 
   ngOnInit() {
     /*
@@ -35,35 +37,71 @@ export class HostComponent implements HostComponentInterface, OnInit {
     this.nonModalService.registerHost(this);
   }
 
-  public onComponentInWindow<T>(componentType: Type<T>, options?: {[p: string]: any}): Promise<ComponentRef<T>> {
+  public onComponentInWindow<T>(componentType: Type<T>, id: any, options?: { [p: string]: any }): Promise<ComponentRef<T>> {
     /*
      * Convert component type into factory
      */
+    const index = this.collection.findIndex(x => x['factory']['componentType'] === componentType
+      && x['id'] === id);
+    if (index !== -1) {
+      this.activeWindow(this.collection[index].factory);
+      return new Promise<ComponentRef<T>>((resolve) => resolve);
+    }
+
     const factory = this.resolver.resolveComponentFactory(componentType);
-    return this.openFactoryInWindow(factory, options);
+    return this.openFactoryInWindow(factory, id, options);
   }
 
-  public openFactoryInWindow<T>(factory: ComponentFactory<T>, options?: {[p: string]: any}): Promise<ComponentRef<T>> {
+  public openFactoryInWindow<T>(factory: ComponentFactory<T>, id: any, options?: { [p: string]: any }): Promise<ComponentRef<T>> {
     /*
      * Store factory into collection, create promise
      * and waiting until window is not registered
      */
+
     let resolver;
     const promise: Promise<ComponentRef<T>> = new Promise<ComponentRef<T>>((resolve) => resolver = resolve);
 
     this.resolvers.set(factory, resolver);
-    this.collection.push([factory, options]);
-
+    this.collection.push({factory: factory, id: id, options: options, hide: false, active: true});
+    this.activeWindow(factory);
     return promise;
   }
 
-  public unregisterWindow(window: WindowComponent) {
+  public unregisterWindow(factory) {
     /*
      * Trigger hosted component OnDestroy hook and
      * splice component factory from collection
      */
-    window.componentRef.destroy();
-    this.collection.splice(this.collection.findIndex(x => x[0] === window.factory), 1);
+    this.viewChildren.forEach(view => {
+      if (view.factory === factory) {
+        view.componentRef.destroy();
+      }
+    });
+    this.collection.splice(this.collection.findIndex(x => x['factory'] === factory), 1);
   }
 
+  public hideWindow(factory) {
+    /*
+     * Hide component
+     */
+    const index = this.collection.findIndex(x => x['factory'] === factory);
+    this.collection[index]['hide'] = true;
+    this.collection[index]['active'] = false;
+    this.nonModalService.onChagneCollection();
+  }
+
+  public activeWindow(factory) {
+    /*
+     * Active component
+     */
+    this.deactiveColletion();
+    const index = this.collection.findIndex(x => x['factory'] === factory);
+    this.collection[index]['hide'] = false;
+    this.collection[index]['active'] = true;
+    this.nonModalService.onChagneCollection();
+  }
+
+  public deactiveColletion() {
+    this.collection.map(item => item['active'] = false);
+  }
 }
